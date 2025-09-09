@@ -1,24 +1,13 @@
-import { cookies } from "next/headers";
-
 import { SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import { AppSidebar } from "@/components/app-sidebar";
-import { Toaster } from "sonner";
 
-export default async function Layout({
-  children,
-}: {
-  children: React.ReactNode;
-}) {
-  const cookieStore = await cookies();
-  const defaultOpen = cookieStore.get("sidebar_state")?.value === "true";
-
+export default function Layout({ children }: { children: React.ReactNode }) {
   return (
-    <SidebarProvider defaultOpen={defaultOpen}>
+    <SidebarProvider>
       <AppSidebar />
-      <main className="flex-1">
+      <main>
         <SidebarTrigger />
         {children}
-        <Toaster position="top-right" richColors closeButton />
       </main>
     </SidebarProvider>
   );
