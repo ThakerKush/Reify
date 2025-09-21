@@ -3,7 +3,7 @@ import type { read } from "../tool/read.js";
 import type { terminalTool } from "../tool/terminal.js";
 import type { createWrite } from "../tool/write.js";
 import { edit } from "../tool/edit.js";
-
+import type { AppRouter } from "../app/index.js";
 type terminalTool = InferUITool<ReturnType<typeof terminalTool>>;
 type readTool = InferUITool<typeof read>;
 type writeTool = InferUITool<ReturnType<typeof createWrite>>;
@@ -51,3 +51,5 @@ export type WsServerMessages =
   | WebsocketMessage<"file_changed", { path: string; content: string }>
   | WebsocketMessage<"error", { message: string }>
   | WebsocketMessage<"file_written", { path: string; content: string }>;
+
+export type Approuter = AppRouter;
