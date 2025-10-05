@@ -39,21 +39,15 @@ import { join } from "path";
 import { Message } from "@repo/db/schema";
 import { authMiddleware } from "../middleware/auth.js";
 import { publicProcedure, router } from "../trpc/trpc.js";
-import { trpcServer } from "@hono/trpc-server"
-const appRouter = router({
-  hello: publicProcedure
-    .input(z.object({ name: z.string() }))
-    .query(async (opts) => {
-      const { input } = opts;
-      return "Hello World! This is the input:" + input.name;
-    }),
-});
+import { trpcServer } from "@hono/trpc-server";
+
+const appRouter = router({});
 
 export type AppRouter = typeof appRouter;
 
 const app = new Hono();
 
-app.use("/trpc/*", trpcServer({router: appRouter}))
+app.use("/trpc/*", trpcServer({ router: appRouter }));
 
 const log = logger.child({ service: "backend" });
 const imageName = "code-workspace:latestV3";
@@ -409,7 +403,7 @@ app
               }
             }
           });
-          const files = await dockerService.listFiles(containerId);
+          constfiles = await dockerService.listFiles(containerId);
           if (!files.ok) {
             console.log("error", files.error);
             ws.send(

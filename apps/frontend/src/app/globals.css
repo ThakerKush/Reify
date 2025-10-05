@@ -44,74 +44,101 @@
 }
 
 :root {
-  --radius: 0.625rem;
-  /* Light theme: warm brownish neutral */
-  --background: oklch(0.97 0.02 50);
-  --foreground: oklch(0.15 0.02 30);
-  --card: oklch(0.98 0.01 50);
-  --card-foreground: oklch(0.15 0.02 30);
-  --popover: oklch(0.98 0.01 50);
-  --popover-foreground: oklch(0.15 0.02 30);
-  --primary: oklch(0.55 0.08 40);
-  --primary-foreground: oklch(0.98 0.01 50);
-  --secondary: oklch(0.93 0.02 45);
-  --secondary-foreground: oklch(0.2 0.02 30);
-  --muted: oklch(0.92 0.02 45);
-  --muted-foreground: oklch(0.45 0.02 35);
-  --accent: oklch(0.94 0.02 45);
-  --accent-foreground: oklch(0.2 0.02 30);
-  --destructive: oklch(0.6 0.2 27);
-  --border: oklch(0.88 0.02 45);
-  --input: oklch(0.94 0.02 45);
-  --ring: oklch(0.7 0.02 40);
-  --chart-1: oklch(0.6 0.16 260);
-  --chart-2: oklch(0.65 0.12 180);
-  --chart-3: oklch(0.55 0.1 210);
-  --chart-4: oklch(0.7 0.15 90);
-  --chart-5: oklch(0.6 0.14 50);
-  --sidebar: oklch(0.95 0.02 45);
-  --sidebar-foreground: oklch(0.18 0.02 30);
-  --sidebar-primary: oklch(0.55 0.08 40);
-  --sidebar-primary-foreground: oklch(0.98 0.01 50);
-  --sidebar-accent: oklch(0.93 0.02 45);
-  --sidebar-accent-foreground: oklch(0.2 0.02 30);
-  --sidebar-border: oklch(0.88 0.02 45);
-  --sidebar-ring: oklch(0.7 0.02 40);
+  --radius: 0.75rem;
+  
+  /* Light theme */
+  --background: #ffffff;
+  --foreground: #000000;
+  --card: #f5f5f7;
+  --card-foreground: #1d1d1f;
+  --popover: #ffffff;
+  --popover-foreground: #1d1d1f;
+  --primary: #007aff;
+  --primary-foreground: #ffffff;
+  --secondary: #f5f5f7;
+  --secondary-foreground: #1d1d1f;
+  --muted: #e5e5ea;
+  --muted-foreground: #8e8e93;
+  --accent: #f5f5f7;
+  --accent-foreground: #1d1d1f;
+  --destructive: #ff3b30;
+  --border: #d1d1d6;
+  --input: #e5e5ea;
+  --ring: #007aff;
+  
+  /* iOS gradient colors */
+  --gradient-cyan: #40e0d0;
+  --gradient-blue: #4a90e2;
+  --gradient-purple: #8b5cf6;
+  --gradient-pink: #ec4899;
+  
+  /* Status colors */
+  --success: #34c759;
+  --warning: #ff9500;
+  --error: #ff3b30;
+  
+  --chart-1: #007aff;
+  --chart-2: #34c759;
+  --chart-3: #ff9500;
+  --chart-4: #ff3b30;
+  --chart-5: #af52de;
+  
+  --sidebar: #f5f5f7;
+  --sidebar-foreground: #1d1d1f;
+  --sidebar-primary: #007aff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #e5e5ea;
+  --sidebar-accent-foreground: #1d1d1f;
+  --sidebar-border: #d1d1d6;
+  --sidebar-ring: #007aff;
 }
 
 .dark {
-  /* Dark theme: warm dark with brown undertones */
-  --background: oklch(0.18 0.02 40);
-  --foreground: oklch(0.95 0.01 50);
-  --card: oklch(0.2 0.02 40);
-  --card-foreground: oklch(0.95 0.01 50);
-  --popover: oklch(0.2 0.02 40);
-  --popover-foreground: oklch(0.95 0.01 50);
-  --primary: oklch(0.6 0.08 45);
-  --primary-foreground: oklch(0.15 0.02 30);
-  --secondary: oklch(0.26 0.02 40);
-  --secondary-foreground: oklch(0.95 0.01 50);
-  --muted: oklch(0.26 0.02 40);
-  --muted-foreground: oklch(0.68 0.02 45);
-  --accent: oklch(0.26 0.02 40);
-  --accent-foreground: oklch(0.95 0.01 50);
-  --destructive: oklch(0.72 0.18 22);
-  --border: oklch(0.32 0.02 40);
-  --input: oklch(0.3 0.02 40);
-  --ring: oklch(0.6 0.02 45);
-  --chart-1: oklch(0.7 0.16 260);
-  --chart-2: oklch(0.65 0.14 180);
-  --chart-3: oklch(0.6 0.12 210);
-  --chart-4: oklch(0.68 0.15 90);
-  --chart-5: oklch(0.6 0.14 50);
-  --sidebar: oklch(0.2 0.02 40);
-  --sidebar-foreground: oklch(0.95 0.01 50);
-  --sidebar-primary: oklch(0.6 0.08 45);
-  --sidebar-primary-foreground: oklch(0.15 0.02 30);
-  --sidebar-accent: oklch(0.26 0.02 40);
-  --sidebar-accent-foreground: oklch(0.95 0.01 50);
-  --sidebar-border: oklch(0.32 0.02 40);
-  --sidebar-ring: oklch(0.6 0.02 45);
+  /* Dark theme - iOS style */
+  --background: #000000;
+  --foreground: #ffffff;
+  --card: #1c1c1e;
+  --card-foreground: #ffffff;
+  --popover: #1c1c1e;
+  --popover-foreground: #ffffff;
+  --primary: #0a84ff;
+  --primary-foreground: #ffffff;
+  --secondary: #2c2c2e;
+  --secondary-foreground: #ffffff;
+  --muted: #2c2c2e;
+  --muted-foreground: #8e8e93;
+  --accent: #2c2c2e;
+  --accent-foreground: #ffffff;
+  --destructive: #ff453a;
+  --border: #38383a;
+  --input: #2c2c2e;
+  --ring: #0a84ff;
+  
+  /* iOS gradient colors (adjusted for dark) */
+  --gradient-cyan: #5ddbcf;
+  --gradient-blue: #64b5f6;
+  --gradient-purple: #9d7bf5;
+  --gradient-pink: #f06292;
+  
+  /* Status colors (dark mode) */
+  --success: #32d74b;
+  --warning: #ff9f0a;
+  --error: #ff453a;
+  
+  --chart-1: #0a84ff;
+  --chart-2: #32d74b;
+  --chart-3: #ff9f0a;
+  --chart-4: #ff453a;
+  --chart-5: #bf5af2;
+  
+  --sidebar: #1c1c1e;
+  --sidebar-foreground: #ffffff;
+  --sidebar-primary: #0a84ff;
+  --sidebar-primary-foreground: #ffffff;
+  --sidebar-accent: #2c2c2e;
+  --sidebar-accent-foreground: #ffffff;
+  --sidebar-border: #38383a;
+  --sidebar-ring: #0a84ff;
 }
 
 @layer base {
@@ -120,5 +147,29 @@
   }
   body {
     @apply bg-background text-foreground;
+  }
+  
+  /* iOS-style Siri gradient for visual effects */
+  .siri-gradient {
+    background: linear-gradient(
+      90deg,
+      var(--gradient-cyan) 0%,
+      var(--gradient-blue) 25%,
+      var(--gradient-purple) 50%,
+      var(--gradient-pink) 75%,
+      var(--gradient-blue) 100%
+    );
+  }
+  
+  .siri-wave {
+    background: linear-gradient(
+      90deg,
+      transparent 0%,
+      var(--gradient-cyan) 20%,
+      var(--gradient-blue) 40%,
+      var(--gradient-purple) 60%,
+      var(--gradient-pink) 80%,
+      transparent 100%
+    );
   }
 }

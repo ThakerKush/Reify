@@ -2,6 +2,7 @@ import { createMiddleware } from "hono/factory";
 import { getCookie } from "hono/cookie";
 import { dbService } from "../services/db.js";
 import { logger } from "../utils/log.js";
+import { publicProcedure } from "../trpc/trpc.js";
 
 const log = logger.child({ service: "auth-middleware" });
 
