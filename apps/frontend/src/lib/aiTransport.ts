@@ -60,6 +60,6 @@ export function createTRPCChatTransport<
       // Simple and clean - just return the stream
       return asyncIteratorToStream<UIMessageChunk>(iterator, abortSignal);
     },
-    async reconnectToStream() {}
+    async reconnectToStream() {},
   };
 }

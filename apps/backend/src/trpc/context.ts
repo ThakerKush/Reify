@@ -1,5 +1,5 @@
 // src/server/context.ts
-import { dbService } from "../services/db";
+import * as dbService from "../services/db";
 import { logger } from "../utils/log";
 import { getCookie } from "../utils/cookie";
 

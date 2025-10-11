@@ -2,7 +2,7 @@ import { tool, UIMessageStreamWriter, type Tool } from "ai";
 import z from "zod";
 import { sessionContext } from "../session/sessionContext.js";
 import { logger } from "../utils/log.js";
-import { dockerService } from "../services/docker.js";
+import * as dockerService from "../services/docker.js";
 import { ChatMessage } from "../app/types.js";
 
 interface WriteToolProps {
