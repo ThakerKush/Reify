@@ -51,34 +51,104 @@ const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app
   .post(
-    "/chat/new",
+    "/chat",
+    // First message - Creates new chat and workspace
     zValidator(
       "json",
       z.object({
         userId: z.number(),
-        chatId: z.string(),
+        message: z.object({
+          id: z.string().uuid(),
+          role: z.enum(["user"]),
+          parts: z.array(partSchema),
+        }),
+        modelProvider: z.string(),
+        model: z.string(),
       })
     ),
     async (c) => {
-      const { userId, chatId } = c.req.valid("json");
-      const projectId = uuidv4();
+      try {
+        const { userId, message, modelProvider, model } = c.req.valid("json");
 
-      const result = await createNewWorkspace(
-        userId,
-        projectId,
-        chatId,
-        imageName
-      );
+        // Generate IDs for new chat
+        const chatId = uuidv4();
+        const projectId = uuidv4();
+        const messageId = message.id;
 
-      if (!result.ok) {
-        log.error(
-          { route: "/chat/new", error: result.error },
-          "Failed to create new workspace"
+        log.info({ chatId, userId }, "Creating new chat and workspace");
+
+        // Create workspace, project, and chat
+        const workspaceResult = await createNewWorkspace(
+          userId,
+          projectId,
+          chatId,
+          imageName
         );
-        return c.json({ error: result.error }, 500);
-      }
 
-      return c.json({ success: true, chatId });
+        if (!workspaceResult.ok) {
+          log.error(
+            { route: "/chat", error: workspaceResult.error },
+            "Failed to create workspace"
+          );
+          return c.json({ error: workspaceResult.error }, 500);
+        }
+
+        // Extract workspace details
+        const { workspace, chat: chatDbId } = workspaceResult.value;
+
+        // Set chatId in response header for frontend
+        c.header("X-Chat-Id", chatId);
+
+        // Create AI stream in the new workspace context
+        const aiStream = await sessionContext.run(
+          getSessionContext(projectId) || {
+            projectId,
+            workspaceInfo: workspace,
+          },
+          async () => {
+            const stream = createUIMessageStream<ChatMessage>({
+              execute: async ({ writer: dataStream }) => {
+                // Workspace is already ready (just created)
+                dataStream.write({
+                  type: "data-workspace",
+                  data: {
+                    status: "ready",
+                    message: "Workspace created",
+                  },
+                  transient: true,
+                });
+
+                // Create and merge AI stream
+                const result = await createAIStream(
+                  [], // No previous messages
+                  message,
+                  modelProvider,
+                  model,
+                  dataStream
+                );
+                dataStream.merge(result.toUIMessageStream());
+              },
+              onFinish: async (event) => {
+                if (event.messages && event.responseMessage) {
+                  await saveMessages(
+                    chatDbId,
+                    message,
+                    messageId,
+                    event.responseMessage
+                  );
+                }
+              },
+            });
+
+            return createUIMessageStreamResponse({ stream });
+          }
+        );
+
+        return aiStream;
+      } catch (error) {
+        log.error(error, "Error creating new chat");
+        return c.json({ error: "Internal server error" }, 500);
+      }
     }
   )
   .get("/chat/:chatId/messages", authMiddleware, async (c) => {
@@ -117,13 +187,11 @@ app
     }
   })
   .post(
-    "/chat",
-    //TODO: add attachment supoprt here
+    "/chat/:chatId",
+    // Follow-up message - Existing chat
     zValidator(
       "json",
       z.object({
-        chatId: z.string().uuid(),
-        messageId: z.string().uuid(),
         userId: z.number(),
         message: z.object({
           id: z.string().uuid(),
@@ -136,17 +204,20 @@ app
     ),
     async (c) => {
       try {
-        const { userId, chatId, messageId, message, modelProvider, model } =
-          c.req.valid("json");
+        const chatId = c.req.param("chatId");
+        const { userId, message, modelProvider, model } = c.req.valid("json");
+        const messageId = message.id;
 
-        // Get chat info
+        log.info({ chatId, userId }, "Processing follow-up message");
+
+        // Get chat info with existing messages
         const chatInfoResult = await getChatInfo(userId, chatId);
         if (!chatInfoResult.ok) {
           log.error(
-            { route: "/chat", error: chatInfoResult.error },
-            "Error when getting chat info"
+            { route: "/chat/:chatId", error: chatInfoResult.error },
+            "Chat not found"
           );
-          return c.json({ error: chatInfoResult.error }, 500);
+          return c.json({ error: "Chat not found" }, 404);
         }
 
         const { messages: dbMessages, chat, project } = chatInfoResult.value;
@@ -162,7 +233,7 @@ app
           async () => {
             const stream = createUIMessageStream<ChatMessage>({
               execute: async ({ writer: dataStream }) => {
-                // Ensure workspace is ready
+                // Ensure workspace is ready (might need restoration)
                 const contextResult = await ensureWorkspaceReady(
                   projectId,
                   dataStream
@@ -181,7 +252,7 @@ app
                   throw new Error("Failed to prepare workspace");
                 }
 
-                // Create and merge AI stream
+                // Create and merge AI stream with message history
                 const result = await createAIStream(
                   messages,
                   message,
@@ -209,7 +280,7 @@ app
 
         return aiStream;
       } catch (error) {
-        log.error(error, "Error when processing chat");
+        log.error(error, "Error processing follow-up message");
         return c.json({ error: "Internal server error" }, 500);
       }
     }

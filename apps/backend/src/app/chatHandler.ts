@@ -1,6 +1,6 @@
 import { v4 as uuidv4 } from "uuid";
 import { readFileSync } from "fs";
-import { streamText, type UserModelMessage } from "ai";
+import { stepCountIs, streamText, type UserModelMessage } from "ai";
 import { Err, Ok, type Result } from "../errors/result.js";
 import { DbError } from "../services/db.js";
 import { DockerError } from "../errors/dockerError.js";
@@ -193,6 +193,7 @@ export const createAIStream = async (
       describe,
       fin,
     },
+    stopWhen: stepCountIs(25),
   });
 };
 

@@ -28,6 +28,26 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
         workspace.workspaceInfo.containerId,
         ["bash", "-c", `cat > ${path} << 'EOF'\n${content}\nEOF`]
       );
+
+      if (!result.ok) {
+        logger.error(
+          { child: "write tool" },
+          `Error writing to file ${path}`,
+          result.error
+        );
+        return `Error writing file: ${result.error.message}`;
+      }
+
+      // Check if there's an error in stderr
+      if (result.value.stderr && result.value.stderr.trim()) {
+        logger.error(
+          { child: "write tool", stderr: result.value.stderr },
+          `Error writing to file ${path}`
+        );
+        return `Error writing file to ${path}: ${result.value.stderr}`;
+      }
+
+      // Success - write to stream and return success message
       dataStream.write({
         type: "data-codeDelta",
         data: {
@@ -35,19 +55,8 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
           content: content,
         },
       });
-      if (result.ok) {
-        logger.info(
-          { child: "write tool" },
-          `File ${path} written successfully with ${content}`
-        );
-        return `File written successfully to ${path}`;
-      } else {
-        logger.error(
-          { child: "write tool" },
-          `Error writing to file ${path}`,
-          result.error
-        );
-        throw Error(result.error.message);
-      }
+
+      logger.info({ child: "write tool" }, `File ${path} written successfully`);
+      return `File written successfully to ${path}`;
     },
   });
