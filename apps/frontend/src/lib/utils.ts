@@ -35,6 +35,11 @@ export async function fetchWithErrorHandlers(
     throw error;
   }
 }
+
+export function generateUUID() {
+  return crypto.randomUUID();
+}
+
 export function sanitizeText(text: string) {
   return text.replace("<has_function_call>", "");
 }

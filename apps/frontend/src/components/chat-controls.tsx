@@ -1,6 +1,12 @@
 "use client";
 
-import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "./ui/select";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "./ui/select";
 import { ArrowUp } from "lucide-react";
 
 interface ChatControlsProps {
@@ -10,15 +16,17 @@ interface ChatControlsProps {
   onModelChange: (model: string) => void;
   onSend: () => void;
   disabled?: boolean;
+  isStreaming?: boolean;
 }
 
-export function ChatControls({ 
-  mode, 
-  model, 
-  onModeChange, 
-  onModelChange, 
+export function ChatControls({
+  mode,
+  model,
+  onModeChange,
+  onModelChange,
   onSend,
-  disabled = false 
+  disabled = false,
+  isStreaming = false,
 }: ChatControlsProps) {
   return (
     <div className="flex items-center justify-between gap-3 p-3 border-t border-border/50">
@@ -49,12 +57,12 @@ export function ChatControls({
       </div>
 
       {/* Round Send Button */}
-      <button 
+      <button
         onClick={onSend}
         disabled={disabled}
         className="flex items-center justify-center w-8 h-8 shrink-0 aspect-square bg-primary text-primary-foreground rounded-full hover:opacity-90 transition-opacity disabled:opacity-50 disabled:cursor-not-allowed"
       >
-        <ArrowUp className="w-4 h-4" />
+        {isStreaming ? "Stop" : <ArrowUp className="w-4 h-4" />}
       </button>
     </div>
   );

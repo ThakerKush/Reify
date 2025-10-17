@@ -193,7 +193,7 @@ export const createAIStream = async (
       describe,
       fin,
     },
-    stopWhen: stepCountIs(25),
+    stopWhen: stepCountIs(100),
   });
 };
 

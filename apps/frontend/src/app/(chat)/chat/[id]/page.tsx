@@ -1,13 +1,18 @@
-"use client";
+import { Chat } from "@/components/chat";
 
-import { useChat } from "@ai-sdk/react";
-import { createTRPCChatTransport } from "@/lib/aiTransport";
-import client from "../../../trpc/index";
-import { useState } from "react";
+export default async function ChatPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
 
-
-  const { messages, status, stop, sendMessage } = useChat({
-    id: "test-chat",
-    transport: createTRPCChatTransport(client.ask.mutate)
-  });
-
+  return (
+    <Chat
+      chatId={id}
+      userId={1} // TODO: Get from session
+      modelProvider="openai"
+      model="gpt-4"
+    />
+  );
+}

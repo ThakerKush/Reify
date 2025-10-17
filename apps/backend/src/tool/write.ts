@@ -15,7 +15,9 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
     inputSchema: z.object({
       path: z
         .string()
-        .describe("Absloute path of the file to write to, must be absolte"),
+        .describe(
+          "Absloute path of the file to write to, must be absolte, make sure you create the files and directories before writing to it"
+        ),
       content: z.string().describe("Content to write to the file"),
     }),
     execute: async ({ path, content }) => {

@@ -1,4 +1,5 @@
 import { Hono } from "hono";
+import { cors } from "hono/cors";
 import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
@@ -29,6 +30,18 @@ export type AppRouter = typeof appRouter;
 
 const app = new Hono();
 
+// Enable CORS for frontend
+app.use(
+  "/*",
+  cors({
+    origin: "http://localhost:3000", // Your frontend URL
+    credentials: true,
+    allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
+    allowHeaders: ["Content-Type", "Authorization"],
+    exposeHeaders: ["X-Chat-Id"], // Important! Expose the chatId header
+  })
+);
+
 app.use("/trpc/*", trpcServer({ router: appRouter }));
 
 const log = logger.child({ service: "backend" });
@@ -50,107 +63,6 @@ const partSchema = z.union([textPartSchema, filePartSchema]);
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app
-  .post(
-    "/chat",
-    // First message - Creates new chat and workspace
-    zValidator(
-      "json",
-      z.object({
-        userId: z.number(),
-        message: z.object({
-          id: z.string().uuid(),
-          role: z.enum(["user"]),
-          parts: z.array(partSchema),
-        }),
-        modelProvider: z.string(),
-        model: z.string(),
-      })
-    ),
-    async (c) => {
-      try {
-        const { userId, message, modelProvider, model } = c.req.valid("json");
-
-        // Generate IDs for new chat
-        const chatId = uuidv4();
-        const projectId = uuidv4();
-        const messageId = message.id;
-
-        log.info({ chatId, userId }, "Creating new chat and workspace");
-
-        // Create workspace, project, and chat
-        const workspaceResult = await createNewWorkspace(
-          userId,
-          projectId,
-          chatId,
-          imageName
-        );
-
-        if (!workspaceResult.ok) {
-          log.error(
-            { route: "/chat", error: workspaceResult.error },
-            "Failed to create workspace"
-          );
-          return c.json({ error: workspaceResult.error }, 500);
-        }
-
-        // Extract workspace details
-        const { workspace, chat: chatDbId } = workspaceResult.value;
-
-        // Set chatId in response header for frontend
-        c.header("X-Chat-Id", chatId);
-
-        // Create AI stream in the new workspace context
-        const aiStream = await sessionContext.run(
-          getSessionContext(projectId) || {
-            projectId,
-            workspaceInfo: workspace,
-          },
-          async () => {
-            const stream = createUIMessageStream<ChatMessage>({
-              execute: async ({ writer: dataStream }) => {
-                // Workspace is already ready (just created)
-                dataStream.write({
-                  type: "data-workspace",
-                  data: {
-                    status: "ready",
-                    message: "Workspace created",
-                  },
-                  transient: true,
-                });
-
-                // Create and merge AI stream
-                const result = await createAIStream(
-                  [], // No previous messages
-                  message,
-                  modelProvider,
-                  model,
-                  dataStream
-                );
-                dataStream.merge(result.toUIMessageStream());
-              },
-              onFinish: async (event) => {
-                if (event.messages && event.responseMessage) {
-                  await saveMessages(
-                    chatDbId,
-                    message,
-                    messageId,
-                    event.responseMessage
-                  );
-                }
-              },
-            });
-
-            return createUIMessageStreamResponse({ stream });
-          }
-        );
-
-        return aiStream;
-      } catch (error) {
-        log.error(error, "Error creating new chat");
-        return c.json({ error: "Internal server error" }, 500);
-      }
-    }
-  )
   .get("/chat/:chatId/messages", authMiddleware, async (c) => {
     try {
       const chatId = c.req.param("chatId");
@@ -188,7 +100,7 @@ app
   })
   .post(
     "/chat/:chatId",
-    // Follow-up message - Existing chat
+    // Unified endpoint - handles both new and existing chats
     zValidator(
       "json",
       z.object({
@@ -200,61 +112,164 @@ app
         }),
         modelProvider: z.string(),
         model: z.string(),
+        isNewChat: z.boolean().optional(), // Explicit flag for creating new chats
       })
     ),
     async (c) => {
       try {
         const chatId = c.req.param("chatId");
-        const { userId, message, modelProvider, model } = c.req.valid("json");
+        const { userId, message, modelProvider, model, isNewChat } =
+          c.req.valid("json");
         const messageId = message.id;
 
-        log.info({ chatId, userId }, "Processing follow-up message");
+        log.info({ chatId, userId, isNewChat }, "Processing message");
 
-        // Get chat info with existing messages
+        // Check if chat exists (also verifies ownership - see getChatInfo implementation)
         const chatInfoResult = await getChatInfo(userId, chatId);
-        if (!chatInfoResult.ok) {
-          log.error(
-            { route: "/chat/:chatId", error: chatInfoResult.error },
-            "Chat not found"
+
+        // Handle existing chat
+        if (chatInfoResult.ok) {
+          // Chat exists - prevent creation even if isNewChat is true
+          if (isNewChat === true) {
+            log.warn(
+              { chatId, userId },
+              "Attempted to create new chat with existing chatId"
+            );
+            return c.json(
+              { error: "Chat already exists with this ID" },
+              409 // Conflict
+            );
+          }
+
+          log.info({ chatId, userId }, "Processing message in existing chat");
+
+          const { messages: dbMessages, chat, project } = chatInfoResult.value;
+          const messages = convertModelMessage(dbMessages);
+          const projectId = project?.uuid!;
+
+          // Create AI stream for existing chat
+          const aiStream = await sessionContext.run(
+            getSessionContext(projectId) || {
+              projectId,
+              workspaceInfo: null as any,
+            },
+            async () => {
+              const stream = createUIMessageStream<ChatMessage>({
+                execute: async ({ writer: dataStream }) => {
+                  // Ensure workspace is ready (might need restoration)
+                  const contextResult = await ensureWorkspaceReady(
+                    projectId,
+                    dataStream
+                  );
+
+                  if (!contextResult.ok) {
+                    log.error(
+                      contextResult.error,
+                      "Failed to prepare workspace"
+                    );
+                    dataStream.write({
+                      type: "data-workspace",
+                      data: {
+                        status: "error",
+                        message: "Failed to restore workspace",
+                      },
+                      transient: true,
+                    });
+                    throw new Error("Failed to prepare workspace");
+                  }
+
+                  // Create and merge AI stream with message history
+                  const result = await createAIStream(
+                    messages,
+                    message,
+                    modelProvider,
+                    model,
+                    dataStream
+                  );
+                  dataStream.merge(result.toUIMessageStream());
+                },
+                onFinish: async (event) => {
+                  if (event.messages && event.responseMessage) {
+                    await saveMessages(
+                      chat.id,
+                      message,
+                      messageId,
+                      event.responseMessage
+                    );
+                  }
+                },
+              });
+
+              return createUIMessageStreamResponse({ stream });
+            }
           );
-          return c.json({ error: "Chat not found" }, 404);
+
+          return aiStream;
         }
 
-        const { messages: dbMessages, chat, project } = chatInfoResult.value;
-        const messages = convertModelMessage(dbMessages);
-        const projectId = project?.uuid!;
+        // Chat doesn't exist - check if user explicitly wants to create new chat
+        if (isNewChat !== true) {
+          log.warn(
+            { chatId, userId },
+            "Chat not found and isNewChat flag not set"
+          );
+          return c.json(
+            {
+              error: "Chat not found. Set isNewChat=true to create a new chat.",
+            },
+            404
+          );
+        }
 
-        // Create AI stream
+        // Handle new chat creation (explicit intent via isNewChat flag)
+        log.info({ chatId, userId }, "Creating new chat and workspace");
+
+        const projectId = uuidv4();
+
+        // Create workspace, project, and chat with the provided chatId
+        const workspaceResult = await createNewWorkspace(
+          userId,
+          projectId,
+          chatId,
+          imageName
+        );
+
+        if (!workspaceResult.ok) {
+          log.error(
+            { route: "/chat/:chatId", error: workspaceResult.error },
+            "Failed to create workspace"
+          );
+          return c.json({ error: workspaceResult.error }, 500);
+        }
+
+        // Extract workspace details
+        const { workspace, chat: chatDbId } = workspaceResult.value;
+
+        // Set chatId in response header for frontend
+        c.header("X-Chat-Id", chatId);
+
+        // Create AI stream in the new workspace context
         const aiStream = await sessionContext.run(
           getSessionContext(projectId) || {
             projectId,
-            workspaceInfo: null as any,
+            workspaceInfo: workspace,
           },
           async () => {
             const stream = createUIMessageStream<ChatMessage>({
               execute: async ({ writer: dataStream }) => {
-                // Ensure workspace is ready (might need restoration)
-                const contextResult = await ensureWorkspaceReady(
-                  projectId,
-                  dataStream
-                );
+                // Workspace is already ready (just created)
+                dataStream.write({
+                  type: "data-workspace",
+                  data: {
+                    status: "ready",
+                    message: "Workspace created",
+                  },
+                  transient: true,
+                });
 
-                if (!contextResult.ok) {
-                  log.error(contextResult.error, "Failed to prepare workspace");
-                  dataStream.write({
-                    type: "data-workspace",
-                    data: {
-                      status: "error",
-                      message: "Failed to restore workspace",
-                    },
-                    transient: true,
-                  });
-                  throw new Error("Failed to prepare workspace");
-                }
-
-                // Create and merge AI stream with message history
+                // Create and merge AI stream
                 const result = await createAIStream(
-                  messages,
+                  [], // No previous messages for new chat
                   message,
                   modelProvider,
                   model,
@@ -265,7 +280,7 @@ app
               onFinish: async (event) => {
                 if (event.messages && event.responseMessage) {
                   await saveMessages(
-                    chat.id,
+                    chatDbId,
                     message,
                     messageId,
                     event.responseMessage
@@ -280,7 +295,7 @@ app
 
         return aiStream;
       } catch (error) {
-        log.error(error, "Error processing follow-up message");
+        log.error(error, "Error processing message");
         return c.json({ error: "Internal server error" }, 500);
       }
     }
