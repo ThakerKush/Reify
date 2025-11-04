@@ -12,7 +12,11 @@ interface ChatInputProps {
   onStop?: () => void;
 }
 
-export function ChatInput({ onSubmit, isStreaming = false, onStop }: ChatInputProps) {
+export function ChatInput({
+  onSubmit,
+  isStreaming = false,
+  onStop,
+}: ChatInputProps) {
   const router = useRouter();
   const textareaRef = useRef<HTMLTextAreaElement>(null);
   const [input, setInput] = useState("");
@@ -56,24 +60,27 @@ export function ChatInput({ onSubmit, isStreaming = false, onStop }: ChatInputPr
 
     try {
       const messageId = generateUUID();
-      
+
       // Call your /chat endpoint
-      const response = await fetch(`${process.env.NEXT_PUBLIC_BACKEND_URL}/chat`, {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          userId: 1, // TODO: Get from session/auth
-          message: {
-            id: messageId,
-            role: "user",
-            parts: [{ type: "text", text: userMessage }],
+      const response = await fetch(
+        `${process.env.NEXT_PUBLIC_BACKEND_URL}/chat`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
           },
-          modelProvider: "openai",
-          model: userModel,
-        }),
-      });
+          body: JSON.stringify({
+            userId: 1, // TODO: Get from session/auth
+            message: {
+              id: messageId,
+              role: "user",
+              parts: [{ type: "text", text: userMessage }],
+            },
+            modelProvider: "openai",
+            model: userModel,
+          }),
+        }
+      );
 
       if (!response.ok) {
         throw new Error("Failed to create chat");
@@ -81,7 +88,7 @@ export function ChatInput({ onSubmit, isStreaming = false, onStop }: ChatInputPr
 
       // Get chatId from response header
       const chatId = response.headers.get("X-Chat-Id");
-      
+
       if (!chatId) {
         throw new Error("No chat ID in response");
       }

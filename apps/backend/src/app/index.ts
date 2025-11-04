@@ -45,7 +45,7 @@ app.use(
 app.use("/trpc/*", trpcServer({ router: appRouter }));
 
 const log = logger.child({ service: "backend" });
-const imageName = "code-workspace:latestV3";
+const imageName = "code-workspace:latestV4";
 
 const textPartSchema = z.object({
   type: z.enum(["text"]),
