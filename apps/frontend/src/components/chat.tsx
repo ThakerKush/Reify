@@ -1,174 +1,97 @@
-import { useState, useEffect } from "react";
-import { ChatMessage, CustomUIDataTypes } from "codeAgent/types/chat";
-import { useSWRConfig } from "swr";
-import { useDataStream } from "./data-stream-provider";
+"use client";
+
 import { useChat } from "@ai-sdk/react";
 import { DataUIPart, DefaultChatTransport } from "ai";
-import { useSession } from "@/lib/auth-client";
-import { ChatSDKError } from "@/lib/errors";
-import { toast } from "sonner";
-import { useArtifactStream } from "@/hooks/use-artifact-stream";
-import { useArtifact } from "@/hooks/use-artifacts";
+import { useRef, useMemo, useState, useCallback } from "react";
+import { generateUUID } from "@/lib/utils";
+import type { ChatMessage, CustomUIDataTypes } from "codeAgent/types/chat";
+import { useDataStream } from "./data-stream-provider";
+import { Messages } from "./message";
 import { Artifact } from "./artifact";
-import { Messages } from "./messages";
-import { AppChatInput } from "./app-chat-input";
-import { useMessages } from "@/hooks/use-messages";
-import { CodeDeltaIDE } from "./code-delta-ide";
+import { DataStreamHandler } from "./data-stream-handler";
+import { ChatInput } from "./app-chatInput";
 
 export function Chat({
-  id,
-  initialMessages,
+  chatId,
+  userId,
+  modelProvider,
   model,
 }: {
-  id: string;
-  initialMessages: ChatMessage[];
+  chatId: string;
+  userId: number;
+  modelProvider: string;
   model: string;
 }) {
-  const { data: session, isPending } = useSession();
-  const { mutate } = useSWRConfig();
   const { setDataStream } = useDataStream();
-  const { artifact } = useArtifact();
-  const [loadedMessages, setLoadedMessages] =
-    useState<ChatMessage[]>(initialMessages);
-  const [containerId, setContainerId] = useState<string | null>(null);
 
-  // Process streaming data for artifacts
-  useArtifactStream();
+  const userIdRef = useRef(userId);
+  const modelProviderRef = useRef(modelProvider);
+  const modelRef = useRef(model);
 
-  const [input, setInput] = useState("");
-
-  const { messages, setMessages, sendMessage, status, stop, regenerate } =
-    useChat<ChatMessage>({
-      id, // Important: provide the chat ID
-      messages: loadedMessages,
-      transport: new DefaultChatTransport({
-        api: `api/chat`,
-        prepareSendMessagesRequest({ messages, messageId, body }) {
+  const transport = useMemo(
+    () =>
+      new DefaultChatTransport({
+        api: `/chat/${chatId}`,
+        prepareSendMessagesRequest(request) {
           return {
             body: {
-              chatId: id,
-              messageId: messageId,
-              userId: Number(session?.user.id),
-              message: messages.at(-1),
-              modelProvider: model.split(":")[0],
-              model: model.split(":")[1],
+              userId: userIdRef.current,
+              message: request.messages.at(-1),
+              modelProvider: modelProviderRef.current,
+              model: modelRef.current,
             },
           };
         },
       }),
-      onData: (dataPart) => {
-        console.log("Received data part:", dataPart); // Debug logging
-        setDataStream(
-          (ds) =>
-            (ds ? [...ds, dataPart] : []) as DataUIPart<CustomUIDataTypes>[]
-        );
-      },
-      onError: (error) => {
-        console.error("Chat error:", error); // Debug logging
-        if (error instanceof ChatSDKError) {
-          toast.error(error.message);
-        }
-      },
-      onFinish: (message) => {
-        console.log("Chat finished:", message); // Debug logging
-      },
-    });
+    [chatId]
+  );
 
-  const { containerRef, endRef, scrollToBottom, isAtBottom, hasSentMessage } =
-    useMessages({
-      chatId: id,
-      status,
-    });
+  const { messages, sendMessage, status, stop } = useChat<ChatMessage>({
+    id: chatId,
+    messages: [],
+    experimental_throttle: 100,
+    generateId: generateUUID,
+    transport,
+    onData: (dataPart) => {
+      setDataStream((prev) => [
+        ...(prev || []),
+        dataPart as DataUIPart<CustomUIDataTypes>,
+      ]);
+    },
+  });
 
-  // Load existing messages for this chat
-  useEffect(() => {
-    if (id && id !== "new") {
-      fetch(`/api/chat/${id}/messages`)
-        .then((res) => res.json())
-        .then((data) => {
-          setContainerId(data.project.uuid);
-          if (data.messages) {
-            setLoadedMessages(data.messages);
-            setMessages(data.messages);
-          }
-        })
-        .catch((error) => {
-          console.error("Failed to load chat messages:", error);
-        });
-    }
-  }, [id, setMessages]);
+  const handleSubmit = useCallback(
+    async (message: string, mentions: string[], modelName: string) => {
+      if (!message.trim() || status === "streaming") return;
 
-  // Auto-scroll behavior
-  useEffect(() => {
-    if (hasSentMessage && status === "streaming") {
-      scrollToBottom("smooth");
-    }
-  }, [hasSentMessage, status, scrollToBottom]);
-
-  // Handle message sending from the input component
-  const handleMessageSent = (text: string) => {
-    sendMessage({
-      role: "user",
-      parts: [{ type: "text", text }],
-    });
-  };
+      await sendMessage({
+        role: "user" as const,
+        parts: [{ type: "text", text: message }],
+      });
+    },
+    [sendMessage, status]
+  );
 
   return (
-    <div className="flex h-full overflow-hidden">
-      {/* Chat area - exactly 1/3 of screen */}
-      <div
-        className="flex-shrink-0 flex-grow-0"
-        style={{ width: "33.333333%" }}
-      >
-        <div className="flex flex-col h-full border-r border-border">
-          {/* Messages area */}
-          <div ref={containerRef} className="flex-1 overflow-y-auto">
-            <Messages messages={messages} />
-            <div ref={endRef} />
-          </div>
+    <>
+      <DataStreamHandler />
 
-          {/* Input area - fixed at bottom */}
-          <div className="flex-shrink-0 border-t bg-background">
-            <div className="p-4">
-              <AppChatInput
-                chatId={id}
-                initialMessages={loadedMessages}
-                isCreateMode={false}
-                onChatCreated={() => {}}
-                onMessageSent={handleMessageSent}
-              />
-            </div>
+      <div className="flex h-dvh flex-col bg-background">
+        <Messages status={status} messages={messages} />
+
+        {/* Input at bottom */}
+        <div className="sticky bottom-0 border-t bg-background px-4 pb-4 pt-3">
+          <div className="mx-auto max-w-4xl">
+            <ChatInput
+              onSubmit={handleSubmit}
+              isStreaming={status === "streaming"}
+              onStop={stop}
+            />
           </div>
         </div>
       </div>
 
-      {/* IDE area - exactly 2/3 of screen */}
-      <div
-        className="flex-shrink-0 flex-grow-0"
-        style={{ width: "66.666667%" }}
-      >
-        <CodeDeltaIDE
-          chatId={id}
-          containerId={containerId!}
-          wsUrl={process.env.NEXT_PUBLIC_WS_URL!}
-        />
-      </div>
-
-      {/* Show artifacts when needed (for other types of artifacts) */}
-      {artifact.isVisible && artifact.kind !== "ide" && (
-        <Artifact
-          chatId={id}
-          input={input}
-          setInput={setInput}
-          status={status}
-          stop={stop}
-          sendMessage={sendMessage}
-          messages={messages}
-          setMessages={setMessages}
-          regenerate={regenerate}
-          isReadonly={false}
-        />
-      )}
-    </div>
+      <Artifact />
+    </>
   );
 }

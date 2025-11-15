@@ -6,6 +6,7 @@ declare global {
     interface ProcessEnv {
       open_router_api_key: string;
       google_api_key: string;
+      exa_api_key: string;
 
       POSTGRES_USER: string;
       POSTGRES_PASSWORD: string;
@@ -32,6 +33,9 @@ export default {
   ai: {
     open_router_api_key: process.env.open_router_api_key,
     google_api_key: process.env.google_api_key,
+  },
+  search: {
+    exa_api_key: process.env.exa_api_key,
   },
   db: {
     POSTGRES_USER: process.env.POSTGRES_USER,

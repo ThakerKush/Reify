@@ -1,9 +1,9 @@
-import { dockerService } from "../services/docker.js";
+import * as dockerService from "../services/docker.js";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../utils/log.js";
-import { dbService } from "../services/db.js";
-import { workspaceManager } from "../services/workspaceManager.js";
-import { s3Service } from "../services/s3.js";
+import * as dbService from "../services/db.js";
+import * as workspaceManager from "../services/workspaceManager.js";
+import * as s3Service from "../services/s3.js";
 import { Err } from "../errors/result.js";
 import { error } from "console";
 import { createGunzip } from "zlib";

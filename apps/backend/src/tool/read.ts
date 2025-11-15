@@ -2,7 +2,7 @@ import { tool, type Tool } from "ai";
 import z from "zod";
 import { sessionContext } from "../session/sessionContext.js";
 import { logger } from "../utils/log.js";
-import { dockerService } from "../services/docker.js";
+import * as dockerService from "../services/docker.js";
 
 export const read: Tool = tool({
   description: "Read a file",

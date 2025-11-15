@@ -12,7 +12,7 @@ interface TerminalToolProps {
 export const terminalTool = ({ dataStream }: TerminalToolProps) =>
   tool({
     description:
-      "Use this tool to execute terminal commands only use this for interactive commands like cd, ls, etc do not use this command to start a server",
+      "Use this tool to execute terminal commands only use this for interactive commands like cd, ls, etc do not use this command to start a server command line npm run dev are NOT allowed",
     inputSchema: z.object({
       command: z.string().describe("The command to execute"),
     }),

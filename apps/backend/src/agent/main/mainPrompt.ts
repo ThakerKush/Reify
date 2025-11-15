@@ -1,0 +1,1 @@
+export const mainPrompt = `You are a coding agnet`

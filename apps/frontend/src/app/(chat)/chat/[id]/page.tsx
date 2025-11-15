@@ -1,33 +1,18 @@
-"use client";
 import { Chat } from "@/components/chat";
-import { DataStreamProvider } from "@/components/data-stream-provider";
-import { useSession } from "@/lib/auth-client";
-import React from "react";
 
-interface PageProps {
-  params: {
-    id: string;
-  };
-}
-
-export default function ChatPage({ params }: PageProps) {
-  const { data: session, isPending } = useSession();
-
-  if (isPending) {
-    return <div>Loading...</div>;
-  }
+export default async function ChatPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
 
   return (
-    <DataStreamProvider>
-      <div className="h-[calc(100vh-3rem)]">
-        {" "}
-        {/* Account for sidebar trigger */}
-        <Chat
-          id={params.id}
-          initialMessages={[]}
-          model="openai:gpt-4o-mini"
-        />
-      </div>
-    </DataStreamProvider>
+    <Chat
+      chatId={id}
+      userId={1} // TODO: Get from session
+      modelProvider="openai"
+      model="gpt-4"
+    />
   );
 }

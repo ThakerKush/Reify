@@ -4,7 +4,7 @@ import { sessionContext } from "../session/sessionContext.js";
 import { createTwoFilesPatch } from "diff";
 import { file } from "zod/v4";
 import { logger } from "../utils/log.js";
-import { dockerService } from "../services/docker.js";
+import * as dockerService from "../services/docker.js";
 export const edit: Tool = tool({
   description: "Edit a file",
   inputSchema: z.object({
