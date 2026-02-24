@@ -20,7 +20,7 @@ import { createWrite } from "../tool/write.js";
 import { read } from "../tool/read.js";
 import { edit } from "../tool/edit.js";
 import { describe } from "../tool/describte.js";
-import { fin } from "../tool/serve.js";
+import { serve as fin } from "../tool/serve.js";
 import { logger } from "../utils/log.js";
 
 const log = logger.child({ service: "business-logic" });
@@ -71,8 +71,10 @@ export const createNewWorkspace = async (
     return Err(chatResult.error);
   }
 
-  // Set up session context
   const context: SessionContext = {
+    vmId: "",
+    projectPath: "",
+    sshConfig: { host: "", port: 0, username: "", privateKey: "" },
     projectId,
     workspaceInfo: containerResult.value,
   };
@@ -142,8 +144,10 @@ export const ensureWorkspaceReady = async (
     }
   }
 
-  // Create and store context
   const context: SessionContext = {
+    vmId: "",
+    projectPath: "",
+    sshConfig: { host: "", port: 0, username: "", privateKey: "" },
     projectId,
     workspaceInfo: workspaceResult.value,
   };

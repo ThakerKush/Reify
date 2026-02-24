@@ -1,4 +1,7 @@
-import { generateKeyPairSync } from "crypto";
+import { execSync } from "child_process";
+import { readFileSync, mkdtempSync, rmSync } from "fs";
+import { join } from "path";
+import { tmpdir } from "os";
 import { Err, Ok, type Result } from "../errors/result.js";
 import { VMError } from "../errors/vmError.js";
 import { logger } from "../utils/log.js";
@@ -24,48 +27,26 @@ export type HatchVM = {
 };
 
 export type SSHKeyPair = {
-  privateKeyPem: string;
-  publicKeyPem: string;
+  privateKeyOpenSSH: string;
   publicKeyOpenSSH: string;
 };
 
-/**
- * Converts a PEM-encoded ed25519 public key to OpenSSH format (ssh-ed25519 AAAA...).
- * The SPKI DER encoding for ed25519 has a fixed 12-byte header before the 32-byte raw key.
- */
-function pemToOpenSSH(pemPublicKey: string): string {
-  const base64 = pemPublicKey
-    .replace("-----BEGIN PUBLIC KEY-----", "")
-    .replace("-----END PUBLIC KEY-----", "")
-    .replace(/\s/g, "");
-
-  const der = Buffer.from(base64, "base64");
-  const rawKey = der.subarray(12);
-
-  const keyType = Buffer.from("ssh-ed25519");
-  const keyTypeLen = Buffer.alloc(4);
-  keyTypeLen.writeUInt32BE(keyType.length);
-
-  const rawKeyLen = Buffer.alloc(4);
-  rawKeyLen.writeUInt32BE(rawKey.length);
-
-  const sshBlob = Buffer.concat([keyTypeLen, keyType, rawKeyLen, rawKey]);
-  return `ssh-ed25519 ${sshBlob.toString("base64")}`;
-}
-
 export function generateSSHKeyPair(): Result<SSHKeyPair, VMError> {
+  const tmpDir = mkdtempSync(join(tmpdir(), "relay-ssh-"));
+  const keyPath = join(tmpDir, "id_ed25519");
+
   try {
-    const { privateKey, publicKey } = generateKeyPairSync("ed25519", {
-      privateKeyEncoding: { type: "pkcs8", format: "pem" },
-      publicKeyEncoding: { type: "spki", format: "pem" },
-    });
+    execSync(`ssh-keygen -t ed25519 -f ${keyPath} -N "" -q`);
 
-    const publicKeyOpenSSH = pemToOpenSSH(publicKey);
+    const privateKeyOpenSSH = readFileSync(keyPath, "utf-8");
+    const publicKeyOpenSSH = readFileSync(`${keyPath}.pub`, "utf-8").trim();
 
-    return Ok({ privateKeyPem: privateKey, publicKeyPem: publicKey, publicKeyOpenSSH });
+    return Ok({ privateKeyOpenSSH, publicKeyOpenSSH });
   } catch (error) {
     log.error(error, "Failed to generate SSH key pair");
     return Err(VMError.keyGenFailed(error));
+  } finally {
+    rmSync(tmpDir, { recursive: true, force: true });
   }
 }
 

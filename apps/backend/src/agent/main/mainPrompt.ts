@@ -1,1 +1,2 @@
-export const mainPrompt = `You are a coding agnet`
+// TODO: write the actual prompt
+export const mainPrompt = `You are Relay, an AI agent.`;

@@ -33,7 +33,6 @@ export const grep = tool({
     if (!ctx) {
       throw new Error("Session context not configured");
     }
-
     const searchPath = path || ".";
     let command = `rg --color never --line-number --with-filename --max-count ${maxResults}`;
     if (include) {

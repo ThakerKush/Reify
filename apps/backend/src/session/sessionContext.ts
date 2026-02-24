@@ -7,6 +7,8 @@ export interface SessionContext {
   projectPath: string;
   sshConfig: SSHConnectionConfig;
   shellChannel?: ClientChannel;
+  projectId?: string;
+  workspaceInfo?: unknown;
   runCommand?: string;
   buildCommand?: string;
   projectDescription?: string;

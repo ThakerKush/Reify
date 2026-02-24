@@ -315,6 +315,54 @@ export const updateStorageLink = async (
   }
 };
 
+export const getVmByUserId = async (
+  userId: number
+): Promise<Result<schema.Vm, DbError>> => {
+  try {
+    const result = await db
+      .select()
+      .from(schema.vm)
+      .where(eq(schema.vm.userId, userId))
+      .limit(1);
+
+    if (result.length === 0) {
+      return Err(DbError.notFound("vm", `userId: ${userId}`));
+    }
+    return Ok(result[0]);
+  } catch (error) {
+    log.error(error, "Failed to get VM by userId");
+    return Err(DbError.queryFailed("getVmByUserId", error));
+  }
+};
+
+export const insertVm = async (vmData: {
+  userId: number;
+  hatchvmId: string;
+  host: string;
+  sshPort: number;
+  sshPrivateKey: string;
+  sshPublicKey: string;
+}): Promise<Result<schema.Vm, DbError>> => {
+  try {
+    const result = await db
+      .insert(schema.vm)
+      .values({
+        userId: vmData.userId,
+        hatchvmId: vmData.hatchvmId,
+        host: vmData.host,
+        sshPort: vmData.sshPort,
+        sshPrivateKey: vmData.sshPrivateKey,
+        sshPublicKey: vmData.sshPublicKey,
+      })
+      .returning();
+
+    return Ok(result[0]);
+  } catch (error) {
+    log.error(error, "Failed to insert VM");
+    return Err(DbError.queryFailed("insertVm", error));
+  }
+};
+
 export const getSessionByToken = async (
   token: string
 ): Promise<Result<schema.Session, DbError>> => {

@@ -12,7 +12,11 @@ import { ChatMessage, WsClientMessages } from "./types.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { router } from "../trpc/trpc.js";
 import { trpcServer } from "@hono/trpc-server";
-import { getChatInfo } from "../services/db.js";
+import { getChatInfo, getVmByUserId, insertVm, insertProject, getProject } from "../services/db.js";
+import { createMainAgent } from "../agent/main/main.js";
+import * as vmService from "../services/vm.js";
+import * as ssh from "../services/ssh.js";
+import config from "../config/index.js";
 import { setupFileWatcher, listFiles } from "../services/docker.js";
 import { getSessionContext } from "../services/workspaceManager.js";
 import {
@@ -63,6 +67,142 @@ const partSchema = z.union([textPartSchema, filePartSchema]);
 const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app
+  .post(
+    "/projects",
+    zValidator(
+      "json",
+      z.object({
+        userId: z.number(),
+        name: z.string().min(1).max(100),
+      })
+    ),
+    async (c) => {
+      const { userId, name } = c.req.valid("json");
+      const projectUuid = uuidv4();
+
+      log.info({ userId, projectUuid }, "Creating project");
+
+      // 1. Find or create VM for this user
+      let vmRow = await getVmByUserId(userId);
+
+      if (!vmRow.ok) {
+        log.info({ userId }, "No VM found, provisioning new one");
+
+        const keyResult = vmService.generateSSHKeyPair();
+        if (!keyResult.ok) {
+          return c.json({ error: "Failed to generate SSH keys" }, 500);
+        }
+
+        const vmResult = await vmService.createVM(keyResult.value.publicKeyOpenSSH);
+        if (!vmResult.ok) {
+          return c.json({ error: vmResult.error.message }, 500);
+        }
+
+        const insertResult = await insertVm({
+          userId,
+          hatchvmId: vmResult.value.id,
+          host: config.hatchvm.sshHost,
+          sshPort: vmResult.value.ssh_port,
+          sshPrivateKey: keyResult.value.privateKeyOpenSSH,
+          sshPublicKey: keyResult.value.publicKeyOpenSSH,
+        });
+
+        if (!insertResult.ok) {
+          return c.json({ error: "Failed to store VM" }, 500);
+        }
+
+        vmRow = insertResult;
+      }
+
+      const vm = vmRow.value;
+      const projectPath = `/home/relay/projects/${projectUuid}`;
+
+      // 2. Create project directory on VM
+      const mkdirResult = await ssh.exec(
+        vm.hatchvmId,
+        {
+          host: vm.host || config.hatchvm.sshHost,
+          port: vm.sshPort || 22,
+          username: "relay",
+          privateKey: vm.sshPrivateKey,
+        },
+        `mkdir -p ${projectPath}`
+      );
+
+      if (!mkdirResult.ok) {
+        log.error(mkdirResult.error, "Failed to create project dir on VM");
+        return c.json({ error: "Failed to create project directory on VM" }, 500);
+      }
+
+      // 3. Insert project in DB
+      const projectResult = await insertProject(projectUuid, userId, "active");
+      if (!projectResult.ok) {
+        return c.json({ error: "Failed to create project in database" }, 500);
+      }
+
+      log.info({ projectUuid, vmId: vm.hatchvmId }, "Project created");
+
+      return c.json({
+        projectId: projectUuid,
+        name,
+        vmId: vm.hatchvmId,
+        projectPath,
+      });
+    }
+  )
+  .post(
+    "/projects/:projectId/chat",
+    zValidator(
+      "json",
+      z.object({
+        userId: z.number(),
+        prompt: z.string().min(1),
+      })
+    ),
+    async (c) => {
+      const projectId = c.req.param("projectId");
+      const { userId, prompt } = c.req.valid("json");
+
+      // 1. Look up project
+      const projectResult = await getProject(projectId);
+      if (!projectResult.ok) {
+        return c.json({ error: "Project not found" }, 404);
+      }
+
+      // 2. Look up VM
+      const vmResult = await getVmByUserId(userId);
+      if (!vmResult.ok) {
+        return c.json({ error: "No VM found for user" }, 404);
+      }
+
+      const vm = vmResult.value;
+      const projectPath = `/home/relay/projects/${projectId}`;
+
+      const sshConfig = {
+        host: vm.host || config.hatchvm.sshHost,
+        port: vm.sshPort || 22,
+        username: "relay",
+        privateKey: vm.sshPrivateKey,
+      };
+
+      // 3. Stream agent response
+      const stream = createUIMessageStream<ChatMessage>({
+        execute: async ({ writer: dataStream }) => {
+          const agent = createMainAgent(dataStream);
+
+          await sessionContext.run(
+            { vmId: vm.hatchvmId, projectPath, sshConfig },
+            async () => {
+              const result = await agent.stream({ prompt });
+              dataStream.merge(result.toUIMessageStream());
+            }
+          );
+        },
+      });
+
+      return createUIMessageStreamResponse({ stream });
+    }
+  )
   .get("/chat/:chatId/messages", authMiddleware, async (c) => {
     try {
       const chatId = c.req.param("chatId");
@@ -150,8 +290,8 @@ app
           // Create AI stream for existing chat
           const aiStream = await sessionContext.run(
             getSessionContext(projectId) || {
-              projectId,
-              workspaceInfo: null as any,
+              vmId: "", projectPath: "", sshConfig: { host: "", port: 0, username: "", privateKey: "" },
+              projectId, workspaceInfo: null as any,
             },
             async () => {
               const stream = createUIMessageStream<ChatMessage>({
@@ -251,8 +391,8 @@ app
         // Create AI stream in the new workspace context
         const aiStream = await sessionContext.run(
           getSessionContext(projectId) || {
-            projectId,
-            workspaceInfo: workspace,
+            vmId: "", projectPath: "", sshConfig: { host: "", port: 0, username: "", privateKey: "" },
+            projectId, workspaceInfo: workspace,
           },
           async () => {
             const stream = createUIMessageStream<ChatMessage>({

@@ -23,6 +23,7 @@ declare global {
 
       HATCHVM_API_URL: string;
       HATCHVM_HOST: string;
+      HATCHVM_SSH_HOST: string;
 
       NAME: string;
       PORT: string;
@@ -58,5 +59,6 @@ export default {
   hatchvm: {
     apiUrl: process.env.HATCHVM_API_URL || "https://api.hatchvm.com",
     host: process.env.HATCHVM_HOST || "hatchvm.com",
+    sshHost: process.env.HATCHVM_SSH_HOST || "hatchvm.com",
   },
 };

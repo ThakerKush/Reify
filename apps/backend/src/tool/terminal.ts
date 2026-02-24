@@ -90,7 +90,6 @@ export const terminalTool = ({ dataStream }: TerminalToolProps) =>
         if (!ctx) {
           throw new Error("Session context not configured");
         }
-
         const shell = await ensureShell(
           ctx.vmId,
           ctx.sshConfig,
