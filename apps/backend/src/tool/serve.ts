@@ -12,10 +12,9 @@ export const fin: Tool = tool({
   }),
   execute: async ({ run, build }) => {
     logger.info({ child: "serve tool" }, `Agent is serving the project`);
-    // TODO: acutally build??
     const context = sessionContext.getContext();
     if (!context) {
-      throw new Error("No context found");
+      throw new Error("Session context not configured");
     }
     context.runCommand = run;
     context.buildCommand = build;

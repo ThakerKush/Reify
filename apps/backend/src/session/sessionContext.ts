@@ -1,12 +1,20 @@
 import { AsyncLocalStorage } from "async_hooks";
-import type { WorkspaceInfo } from "../services/docker.js";
+import type { SSHConnectionConfig } from "../services/ssh.js";
+import type { ClientChannel } from "ssh2";
 
 export interface SessionContext {
-  projectId: string;
-  workspaceInfo: WorkspaceInfo;
+  vmId: string;
+  projectPath: string;
+  sshConfig: SSHConnectionConfig;
+  shellChannel?: ClientChannel;
   runCommand?: string;
   buildCommand?: string;
   projectDescription?: string;
+  todo?: Array<{
+    description: string;
+    status: "pending" | "in_progress" | "completed";
+    priority: "low" | "medium" | "high";
+  }>;
 }
 
 class SessionContextManager {
@@ -16,7 +24,6 @@ class SessionContextManager {
   private constructor() {}
 
   async run<T>(context: SessionContext, cb: () => T): Promise<T> {
-    console.log("Running context", context);
     return this.asyncLocalStorage.run<T>(context, cb);
   }
 

@@ -4,7 +4,7 @@ import { sessionContext } from "../session/sessionContext.js";
 import { logger } from "../utils/log.js";
 
 const todoSchema = z.object({
-  description: z.string().describe("Breif description of the current task"),
+  description: z.string().describe("Brief description of the current task"),
   status: z
     .enum(["pending", "in_progress", "completed"])
     .describe("The status of the current task"),
@@ -14,48 +14,39 @@ const todoSchema = z.object({
 });
 
 export const todoWrite: Tool = tool({
-  description: "You can use this tool to only write to the todo list.",
+  description: "Write to the todo list to track tasks.",
   inputSchema: z.object({
     todo: z
       .array(todoSchema)
-      .describe("The todo list to read from or write to"),
+      .describe("The todo list items to write"),
   }),
   execute: async ({ todo }) => {
     logger.info(
       { child: "todo write tool" },
       `Agent is writing todo list with ${todo.length} items`
     );
-    // add the todo list to session context
     const context = sessionContext.getContext();
     if (!context) {
-      throw new Error("No context found");
+      throw new Error("Session context not configured");
     }
-    context.workspaceInfo.todo = todo;
-    return {
-      message: `Todo list updated with ${todo.length} items`,
-    };
+    context.todo = todo;
+    return { message: `Todo list updated with ${todo.length} items` };
   },
 });
 
 export const todoRead: Tool = tool({
-  description: "You can use this tool to read the todo list.",
+  description: "Read the current todo list.",
   inputSchema: z.object({}),
   execute: async () => {
     logger.info({ child: "todo read tool" }, `Agent is reading todo list`);
     const context = sessionContext.getContext();
     if (!context) {
-      throw new Error("No context found");
+      throw new Error("Session context not configured");
     }
-    const todo = context.workspaceInfo.todo;
+    const todo = context.todo;
     if (!todo) {
-      logger.error(
-        { child: "todo read tool" },
-        `No todo list found in context`
-      );
-      throw new Error("No todo list found");
+      return { message: "No todo list found" };
     }
-    return {
-      message: JSON.stringify(todo),
-    };
+    return { message: JSON.stringify(todo) };
   },
 });

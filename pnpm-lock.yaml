@@ -105,6 +105,9 @@ importers:
       postgres:
         specifier: ^3.4.7
         version: 3.4.7
+      ssh2:
+        specifier: ^1.17.0
+        version: 1.17.0
       tar-fs:
         specifier: ^3.1.0
         version: 3.1.0
@@ -121,6 +124,9 @@ importers:
       '@types/node':
         specifier: ^20.11.17
         version: 20.19.8
+      '@types/ssh2':
+        specifier: ^1.15.5
+        version: 1.15.5
       tsx:
         specifier: ^4.7.1
         version: 4.20.3
@@ -4514,8 +4520,8 @@ packages:
     resolution: {integrity: sha512-UcjcJOWknrNkF6PLX83qcHM6KHgVKNkV62Y8a5uYDVv9ydGQVwAHMKqHdJje1VTWpljG0WYpCDhrCdAOYH4TWg==}
     engines: {node: '>= 10.x'}
 
-  ssh2@1.16.0:
-    resolution: {integrity: sha512-r1X4KsBGedJqo7h8F5c4Ybpcr5RjyP+aWIG007uBPRjmdQWfEiVLzSK71Zji1B9sKxwaCvD8y8cwSkYrlLiRRg==}
+  ssh2@1.17.0:
+    resolution: {integrity: sha512-wPldCk3asibAjQ/kziWQQt1Wh3PgDFpC0XpwclzKcdT1vql6KeYxf5LIt4nlFkUeR8WuphYMKqUA56X4rjbfgQ==}
     engines: {node: '>=10.16.0'}
 
   stable-hash@0.0.5:
@@ -8038,7 +8044,7 @@ snapshots:
       debug: 4.4.1
       readable-stream: 3.6.2
       split-ca: 1.0.1
-      ssh2: 1.16.0
+      ssh2: 1.17.0
     transitivePeerDependencies:
       - supports-color
 
@@ -10065,7 +10071,7 @@ snapshots:
 
   split2@4.2.0: {}
 
-  ssh2@1.16.0:
+  ssh2@1.17.0:
     dependencies:
       asn1: 0.2.6
       bcrypt-pbkdf: 1.0.2

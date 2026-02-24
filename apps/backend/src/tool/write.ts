@@ -2,8 +2,8 @@ import { tool, UIMessageStreamWriter, type Tool } from "ai";
 import z from "zod";
 import { sessionContext } from "../session/sessionContext.js";
 import { logger } from "../utils/log.js";
-import * as dockerService from "../services/docker.js";
-import { ChatMessage } from "../app/types.js";
+import * as ssh from "../services/ssh.js";
+import type { ChatMessage } from "../app/types.js";
 
 interface WriteToolProps {
   dataStream: UIMessageStreamWriter<ChatMessage>;
@@ -16,19 +16,22 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
       path: z
         .string()
         .describe(
-          "Absloute path of the file to write to, must be absolte, make sure you create the files and directories before writing to it"
+          "Absolute path of the file to write to. Make sure parent directories exist before writing."
         ),
       content: z.string().describe("Content to write to the file"),
     }),
     execute: async ({ path, content }) => {
       logger.info({ child: "write tool" }, `Agent is writing to file ${path}`);
-      const workspace = sessionContext.getContext();
-      if (!workspace) {
-        throw Error("Workspace Info not configured");
+      const ctx = sessionContext.getContext();
+      if (!ctx) {
+        throw Error("Session context not configured");
       }
-      const result = await dockerService.executeCommand(
-        workspace.workspaceInfo.containerId,
-        ["bash", "-c", `cat > ${path} << 'EOF'\n${content}\nEOF`]
+
+      const result = await ssh.exec(
+        ctx.vmId,
+        ctx.sshConfig,
+        `mkdir -p "$(dirname '${path}')" && cat > '${path}' << 'RELAY_EOF'\n${content}\nRELAY_EOF`,
+        { cwd: ctx.projectPath }
       );
 
       if (!result.ok) {
@@ -40,7 +43,6 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
         return `Error writing file: ${result.error.message}`;
       }
 
-      // Check if there's an error in stderr
       if (result.value.stderr && result.value.stderr.trim()) {
         logger.error(
           { child: "write tool", stderr: result.value.stderr },
@@ -49,7 +51,6 @@ export const createWrite = ({ dataStream }: WriteToolProps) =>
         return `Error writing file to ${path}: ${result.value.stderr}`;
       }
 
-      // Success - write to stream and return success message
       dataStream.write({
         type: "data-codeDelta",
         data: {

@@ -10,12 +10,9 @@ export const describe = tool({
   execute: async ({ description }) => {
     const context = sessionContext.getContext();
     if (!context) {
-      // TODO: Figure out error handling inside tool calls
-      throw new Error("No context found");
+      throw new Error("Session context not configured");
     }
     context.projectDescription = description;
-    return {
-      message: `Project described as ${description}`,
-    };
+    return { message: `Project described as ${description}` };
   },
 });
