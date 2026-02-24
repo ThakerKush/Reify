@@ -115,3 +115,20 @@ export const project = pgTable("projects", {
 });
 
 export type Project = InferSelectModel<typeof project>;
+
+export const vm = pgTable("vm", {
+  id: serial("id").primaryKey(),
+  userId: integer("userId")
+    .notNull()
+    .references(() => user.id, { onDelete: "cascade" }),
+  hatchvmId: text("hatchvm_id").notNull(),       // ID from your hatchvm API
+  host: text("host"),                              // IP or hostname
+  sshPort: integer("ssh_port").default(22),
+  sshPrivateKey: text("ssh_private_key").notNull(), // ed25519 private key
+  sshPublicKey: text("ssh_public_key").notNull(),   // corresponding public key
+  lastActiveAt: timestamp("last_active_at").defaultNow(),
+  createdAt: timestamp("createdAt").notNull().defaultNow(),
+  updatedAt: timestamp("updatedAt").notNull().defaultNow(),
+});
+
+export type Vm = InferSelectModel<typeof vm>;

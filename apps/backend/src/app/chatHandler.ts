@@ -172,8 +172,10 @@ export const createAIStream = async (
   model: string,
   dataStream: any
 ) => {
+  // Registry currently exposes openRouter only; normalize external value to typed id.
+  const registryModelId: `openRouter:${string}` = `openRouter:${model}`;
   return streamText({
-    model: registery.languageModel(`${modelProvider}:${model}`),
+    model: registery.languageModel(registryModelId),
     system: readFileSync(
       new URL("../prompts/system.txt", import.meta.url),
       "utf-8"

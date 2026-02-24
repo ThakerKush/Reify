@@ -144,7 +144,7 @@ app
           log.info({ chatId, userId }, "Processing message in existing chat");
 
           const { messages: dbMessages, chat, project } = chatInfoResult.value;
-          const messages = convertModelMessage(dbMessages);
+          const messages = await convertModelMessage(dbMessages);
           const projectId = project?.uuid!;
 
           // Create AI stream for existing chat

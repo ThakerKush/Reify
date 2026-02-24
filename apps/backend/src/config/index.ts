@@ -21,6 +21,9 @@ declare global {
       S3_BUCKET: string;
       S3_FORCE_PATH_STYLE: string;
 
+      HATCHVM_API_URL: string;
+      HATCHVM_HOST: string;
+
       NAME: string;
       PORT: string;
     }
@@ -51,5 +54,9 @@ export default {
     secretAccessKey: process.env.S3_SECRET_KEY,
     bucketName: process.env.S3_BUCKET,
     forcePathStyle: process.env.S3_FORCE_PATH_STYLE === "true",
+  },
+  hatchvm: {
+    apiUrl: process.env.HATCHVM_API_URL || "https://api.hatchvm.com",
+    host: process.env.HATCHVM_HOST || "hatchvm.com",
   },
 };

@@ -14,7 +14,9 @@ import {
   type UserModelMessage,
 } from "ai";
 
-export function convertModelMessage(message: schema.Message[]): ModelMessage[] {
+export async function convertModelMessage(
+  message: schema.Message[]
+): Promise<ModelMessage[]> {
   const uiMessages = message.map((message) => {
     const uiMessage: UIMessage = {
       id: message.messageUuid,
@@ -23,5 +25,5 @@ export function convertModelMessage(message: schema.Message[]): ModelMessage[] {
     };
     return uiMessage;
   });
-  return convertToModelMessages(uiMessages);
+  return await convertToModelMessages(uiMessages);
 }
