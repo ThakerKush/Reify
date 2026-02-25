@@ -4,28 +4,29 @@ import { zValidator } from "@hono/zod-validator";
 import { z } from "zod";
 import { v4 as uuidv4 } from "uuid";
 import { logger } from "../utils/log.js";
-import { createNodeWebSocket } from "@hono/node-ws";
 import { createUIMessageStream, createUIMessageStreamResponse } from "ai";
 import { sessionContext } from "../session/sessionContext.js";
 import { convertModelMessage } from "../utils/convertModelMessage.js";
-import { ChatMessage, WsClientMessages } from "./types.js";
+import { ChatMessage } from "./types.js";
 import { authMiddleware } from "../middleware/auth.js";
 import { router } from "../trpc/trpc.js";
 import { trpcServer } from "@hono/trpc-server";
-import { getChatInfo, getVmByUserId, insertVm, insertProject, getProject } from "../services/db.js";
+import {
+  getChatInfo,
+  getVmByProjectId,
+  insertVm,
+  insertProject,
+  getProject,
+} from "../services/db.js";
 import { createMainAgent } from "../agent/main/main.js";
 import * as vmService from "../services/vm.js";
 import * as ssh from "../services/ssh.js";
 import config from "../config/index.js";
-import { setupFileWatcher, listFiles } from "../services/docker.js";
-import { getSessionContext } from "../services/workspaceManager.js";
 import {
-  createNewWorkspace,
-  ensureWorkspaceReady,
+  createProjectChatContext,
+  resolveProjectChatContext,
   createAIStream,
   saveMessages,
-  handleFileChangeEvent,
-  handleWebSocketMessage,
 } from "./chatHandler.js";
 
 const appRouter = router({});
@@ -33,6 +34,7 @@ const appRouter = router({});
 export type AppRouter = typeof appRouter;
 
 const app = new Hono();
+const injectWebSocket = (_server: unknown) => {};
 
 // Enable CORS for frontend
 app.use(
@@ -49,7 +51,6 @@ app.use(
 app.use("/trpc/*", trpcServer({ router: appRouter }));
 
 const log = logger.child({ service: "backend" });
-const imageName = "code-workspace:latestV4";
 
 const textPartSchema = z.object({
   type: z.enum(["text"]),
@@ -64,7 +65,6 @@ const filePartSchema = z.object({
 });
 
 const partSchema = z.union([textPartSchema, filePartSchema]);
-const { injectWebSocket, upgradeWebSocket } = createNodeWebSocket({ app });
 
 app
   .post(
@@ -82,42 +82,41 @@ app
 
       log.info({ userId, projectUuid }, "Creating project");
 
-      // 1. Find or create VM for this user
-      let vmRow = await getVmByUserId(userId);
-
-      if (!vmRow.ok) {
-        log.info({ userId }, "No VM found, provisioning new one");
-
-        const keyResult = vmService.generateSSHKeyPair();
-        if (!keyResult.ok) {
-          return c.json({ error: "Failed to generate SSH keys" }, 500);
-        }
-
-        const vmResult = await vmService.createVM(keyResult.value.publicKeyOpenSSH);
-        if (!vmResult.ok) {
-          return c.json({ error: vmResult.error.message }, 500);
-        }
-
-        const insertResult = await insertVm({
-          userId,
-          hatchvmId: vmResult.value.id,
-          host: config.hatchvm.sshHost,
-          sshPort: vmResult.value.ssh_port,
-          sshPrivateKey: keyResult.value.privateKeyOpenSSH,
-          sshPublicKey: keyResult.value.publicKeyOpenSSH,
-        });
-
-        if (!insertResult.ok) {
-          return c.json({ error: "Failed to store VM" }, 500);
-        }
-
-        vmRow = insertResult;
+      // 1. Insert project in DB so VM can be linked one-to-one with project
+      const projectResult = await insertProject(projectUuid, userId);
+      if (!projectResult.ok) {
+        return c.json({ error: "Failed to create project in database" }, 500);
       }
 
-      const vm = vmRow.value;
+      // 2. Provision a dedicated VM for this project
+      const keyResult = vmService.generateSSHKeyPair();
+      if (!keyResult.ok) {
+        return c.json({ error: "Failed to generate SSH keys" }, 500);
+      }
+
+      const vmResult = await vmService.createVM(keyResult.value.publicKeyOpenSSH);
+      if (!vmResult.ok) {
+        return c.json({ error: vmResult.error.message }, 500);
+      }
+
+      const vmInsertResult = await insertVm({
+        userId,
+        projectId: projectResult.value,
+        hatchvmId: vmResult.value.id,
+        host: config.hatchvm.sshHost,
+        sshPort: vmResult.value.ssh_port,
+        sshPrivateKey: keyResult.value.privateKeyOpenSSH,
+        sshPublicKey: keyResult.value.publicKeyOpenSSH,
+      });
+
+      if (!vmInsertResult.ok) {
+        return c.json({ error: "Failed to store VM" }, 500);
+      }
+
+      const vm = vmInsertResult.value;
       const projectPath = `/home/relay/projects/${projectUuid}`;
 
-      // 2. Create project directory on VM
+      // 3. Create project directory on VM
       const mkdirResult = await ssh.exec(
         vm.hatchvmId,
         {
@@ -132,12 +131,6 @@ app
       if (!mkdirResult.ok) {
         log.error(mkdirResult.error, "Failed to create project dir on VM");
         return c.json({ error: "Failed to create project directory on VM" }, 500);
-      }
-
-      // 3. Insert project in DB
-      const projectResult = await insertProject(projectUuid, userId, "active");
-      if (!projectResult.ok) {
-        return c.json({ error: "Failed to create project in database" }, 500);
       }
 
       log.info({ projectUuid, vmId: vm.hatchvmId }, "Project created");
@@ -169,10 +162,14 @@ app
         return c.json({ error: "Project not found" }, 404);
       }
 
-      // 2. Look up VM
-      const vmResult = await getVmByUserId(userId);
+      if (projectResult.value.userId !== userId) {
+        return c.json({ error: "Project does not belong to user" }, 403);
+      }
+
+      // 2. Look up VM for this project
+      const vmResult = await getVmByProjectId(projectResult.value.id);
       if (!vmResult.ok) {
-        return c.json({ error: "No VM found for user" }, 404);
+        return c.json({ error: "No VM found for project" }, 404);
       }
 
       const vm = vmResult.value;
@@ -258,7 +255,7 @@ app
     async (c) => {
       try {
         const chatId = c.req.param("chatId");
-        const { userId, message, modelProvider, model, isNewChat } =
+        const { userId, message, model, isNewChat } =
           c.req.valid("json");
         const messageId = message.id;
 
@@ -286,43 +283,22 @@ app
           const { messages: dbMessages, chat, project } = chatInfoResult.value;
           const messages = await convertModelMessage(dbMessages);
           const projectId = project?.uuid!;
+          const contextResult = await resolveProjectChatContext(projectId);
+          if (!contextResult.ok) {
+            log.error(contextResult.error, "Failed to resolve project context");
+            return c.json({ error: "Failed to prepare project context" }, 500);
+          }
 
           // Create AI stream for existing chat
           const aiStream = await sessionContext.run(
-            getSessionContext(projectId) || {
-              vmId: "", projectPath: "", sshConfig: { host: "", port: 0, username: "", privateKey: "" },
-              projectId, workspaceInfo: null as any,
-            },
+            contextResult.value,
             async () => {
               const stream = createUIMessageStream<ChatMessage>({
                 execute: async ({ writer: dataStream }) => {
-                  // Ensure workspace is ready (might need restoration)
-                  const contextResult = await ensureWorkspaceReady(
-                    projectId,
-                    dataStream
-                  );
-
-                  if (!contextResult.ok) {
-                    log.error(
-                      contextResult.error,
-                      "Failed to prepare workspace"
-                    );
-                    dataStream.write({
-                      type: "data-workspace",
-                      data: {
-                        status: "error",
-                        message: "Failed to restore workspace",
-                      },
-                      transient: true,
-                    });
-                    throw new Error("Failed to prepare workspace");
-                  }
-
                   // Create and merge AI stream with message history
                   const result = await createAIStream(
                     messages,
                     message,
-                    modelProvider,
                     model,
                     dataStream
                   );
@@ -367,51 +343,35 @@ app
         const projectId = uuidv4();
 
         // Create workspace, project, and chat with the provided chatId
-        const workspaceResult = await createNewWorkspace(
+        const projectContextResult = await createProjectChatContext(
           userId,
           projectId,
-          chatId,
-          imageName
+          chatId
         );
 
-        if (!workspaceResult.ok) {
+        if (!projectContextResult.ok) {
           log.error(
-            { route: "/chat/:chatId", error: workspaceResult.error },
-            "Failed to create workspace"
+            { route: "/chat/:chatId", error: projectContextResult.error },
+            "Failed to create project chat context"
           );
-          return c.json({ error: workspaceResult.error }, 500);
+          return c.json({ error: projectContextResult.error }, 500);
         }
 
-        // Extract workspace details
-        const { workspace, chat: chatDbId } = workspaceResult.value;
+        const { chatDbId, context } = projectContextResult.value;
 
         // Set chatId in response header for frontend
         c.header("X-Chat-Id", chatId);
 
         // Create AI stream in the new workspace context
         const aiStream = await sessionContext.run(
-          getSessionContext(projectId) || {
-            vmId: "", projectPath: "", sshConfig: { host: "", port: 0, username: "", privateKey: "" },
-            projectId, workspaceInfo: workspace,
-          },
+          context,
           async () => {
             const stream = createUIMessageStream<ChatMessage>({
               execute: async ({ writer: dataStream }) => {
-                // Workspace is already ready (just created)
-                dataStream.write({
-                  type: "data-workspace",
-                  data: {
-                    status: "ready",
-                    message: "Workspace created",
-                  },
-                  transient: true,
-                });
-
                 // Create and merge AI stream
                 const result = await createAIStream(
                   [], // No previous messages for new chat
                   message,
-                  modelProvider,
                   model,
                   dataStream
                 );
@@ -439,68 +399,6 @@ app
         return c.json({ error: "Internal server error" }, 500);
       }
     }
-  )
-  .get(
-    "/ws/:chatId",
-    upgradeWebSocket(async (c) => {
-      const chatId = c.req.param("chatId");
-      const userId = Number(c.req.query("userId"));
-
-      log.info({ chatId, userId }, "WebSocket connection attempt");
-
-      // Get chat and container info
-      const chatResult = await getChatInfo(userId, chatId);
-      if (!chatResult.ok) {
-        log.error(chatResult.error, "Failed to get chat info for WebSocket");
-        throw new Error(chatResult.error.message);
-      }
-
-      const containerId = chatResult.value.project?.uuid!;
-      const stream = await setupFileWatcher(containerId);
-
-      return {
-        async onOpen(event, ws) {
-          // Set up file watcher
-          stream.on("data", async (chunk) => {
-            const output = chunk.toString().trim();
-            const [event, filePath] = output.split(" ", 2);
-            await handleFileChangeEvent(event, filePath, containerId, ws);
-          });
-
-          // Send initial file list
-          const filesResult = await listFiles(containerId);
-          if (filesResult.ok) {
-            ws.send(
-              JSON.stringify({
-                type: "initial_files",
-                files: filesResult.value,
-              })
-            );
-          } else {
-            log.error(
-              filesResult.error,
-              "Failed to list files on WebSocket open"
-            );
-            ws.send(
-              JSON.stringify({ type: "error", message: "Failed to list files" })
-            );
-          }
-        },
-
-        async onMessage(event, ws) {
-          try {
-            const msg: WsClientMessages = JSON.parse(event.data.toString());
-            log.info({ type: msg.type }, "Received WebSocket message");
-            await handleWebSocketMessage(msg, containerId, ws);
-          } catch (error) {
-            log.error(error, "Error handling WebSocket message");
-            ws.send(
-              JSON.stringify({ type: "error", message: "Invalid message" })
-            );
-          }
-        },
-      };
-    })
   );
 
 export { app, injectWebSocket };

@@ -105,11 +105,6 @@ export const project = pgTable("projects", {
     .notNull()
     .references(() => user.id),
   uuid: uuid("uuid").notNull(),
-  storageLink: text("storageLink"),
-  lastHeartbeat: timestamp("last_heartbeat").defaultNow(),
-  workspaceStatus: varchar("workspace_status", {
-    enum: ["inactive", "active", "archiving"],
-  }).default("inactive"),
   createdAt: timestamp("createdAt").notNull(),
   updatedAt: timestamp("updatedAt").notNull(),
 });
@@ -118,6 +113,10 @@ export type Project = InferSelectModel<typeof project>;
 
 export const vm = pgTable("vm", {
   id: serial("id").primaryKey(),
+  projectId: integer("projectId")
+    .notNull()
+    .references(() => project.id, { onDelete: "cascade" })
+    .unique(),
   userId: integer("userId")
     .notNull()
     .references(() => user.id, { onDelete: "cascade" }),
